@@ -3,192 +3,208 @@
 # React CI/CD Pipeline
 # ============================================================
 #
-# CI/CD means:
+# This workflow does two major things:
 #
 # CI = Continuous Integration
-#     Automatically install, test, and build the application
-#     whenever code changes.
+# --------------------------------
+# 1. Get the source code
+# 2. Install Node.js
+# 3. Install dependencies
+# 4. Run tests
+# 5. Build the React application
 #
 # CD = Continuous Deployment
-#     Automatically deploy the application after a successful
-#     build.
+# --------------------------------
+# 6. Upload the production build
+# 7. Deploy it to GitHub Pages
 #
-# In this workflow:
 #
-#   GitHub
-#      |
-#      | push / pull request
-#      v
-#   GitHub Actions
-#      |
-#      +--> Checkout code
-#      |
-#      +--> Install Node.js
-#      |
-#      +--> Install dependencies
-#      |
-#      +--> Run tests
-#      |
-#      +--> Build React application
-#      |
-#      +--> Deploy to GitHub Pages
+# We are using ONLY official GitHub Actions:
+#
+#   actions/checkout
+#   actions/setup-node
+#   actions/configure-pages
+#   actions/upload-pages-artifact
+#   actions/deploy-pages
+#
+# No JamesIves or other third-party deployment action.
 #
 # ============================================================
 
 
-# ------------------------------------------------------------
+# ============================================================
 # WORKFLOW NAME
-# ------------------------------------------------------------
+# ============================================================
 #
-# This is simply the name displayed in the GitHub Actions UI.
+# This is the name you'll see under:
 #
-# You will see something like:
+# GitHub repository
+#      ↓
+# Actions
+#
+# You'll see:
 #
 #   React CI/CD Pipeline
 #
-# in the "Actions" tab of your GitHub repository.
 
-name: Grady React CI/CD Pipeline
+name: React CI/CD Pipeline
 
 
-# ------------------------------------------------------------
-# WHEN SHOULD THIS WORKFLOW RUN?
-# ------------------------------------------------------------
+# ============================================================
+# WHEN DOES THIS WORKFLOW RUN?
+# ============================================================
 #
-# "on" defines the events that trigger the workflow.
+# We have two triggers.
 #
-# We are saying:
+# 1. PUSH
 #
-# 1. Run when someone PUSHES code to the main branch.
+#    Run when code is pushed to the main branch.
 #
-# 2. Run when someone creates/updates a PULL REQUEST
-#    targeting the main branch.
+#    Example:
 #
-# This gives us two useful situations:
+#       git push origin main
 #
-# Pull Request:
-#   "Is this code safe to merge?"
+#    This will eventually:
 #
-# Push to main:
-#   "The code has been merged. Test, build, and deploy it."
+#       Test → Build → Deploy
+#
+#
+# 2. PULL REQUEST
+#
+#    Run when a Pull Request targets main.
+#
+#    Example:
+#
+#       feature/login
+#             ↓
+#       Pull Request
+#             ↓
+#           main
+#
+#    This lets us test the code before merging it.
+#
+#    IMPORTANT:
+#
+#    Pull Requests will NOT deploy because our deploy job
+#    contains an additional condition.
 #
 
 on:
 
-  # ----------------------------------------------------------
-  # PUSH EVENT
-  # ----------------------------------------------------------
-  #
-  # A push happens when commits are pushed to GitHub.
-  #
-  # Example:
-  #
-  #   git add .
-  #   git commit -m "Add login page"
-  #   git push origin main
-  #
-  # Because the branch is "main", the workflow starts.
-
   push:
-    branches: [ main ]
-
-
-  # ----------------------------------------------------------
-  # PULL REQUEST EVENT
-  # ----------------------------------------------------------
-  #
-  # This workflow also runs when a Pull Request targets main.
-  #
-  # Example:
-  #
-  #   feature/login
-  #          |
-  #          | Pull Request
-  #          v
-  #        main
-  #
-  # GitHub Actions will run the tests/build before the PR
-  # is merged.
-  #
+    branches:
+      - main
 
   pull_request:
-    branches: [ main ]
+    branches:
+      - main
+
+
+# ============================================================
+# PERMISSIONS
+# ============================================================
+#
+# GitHub Actions uses a special GITHUB_TOKEN to interact
+# with your repository and GitHub services.
+#
+# We explicitly give this workflow the permissions it needs.
+#
+# contents: read
+# ----------------
+# Allows the workflow to read your repository's source code.
+#
+#
+# pages: write
+# ----------------
+# Allows the workflow to publish your website to
+# GitHub Pages.
+#
+#
+# id-token: write
+# ----------------
+# GitHub Pages deployment uses an OIDC identity token to
+# securely authenticate the deployment.
+#
+# GitHub's official documentation requires at least
+# pages: write and id-token: write for deploy-pages.
+#
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
 
 
 # ============================================================
 # JOBS
 # ============================================================
 #
-# A workflow contains one or more "jobs".
+# A workflow contains jobs.
 #
-# Here we have ONE job:
+# We are going to have TWO jobs:
 #
-#   build-and-deploy
 #
-# A job is a collection of steps that GitHub executes.
-#
-# Conceptually:
-#
-#   Workflow
+#   build
 #      |
-#      +-- Job: build-and-deploy
-#              |
-#              +-- Step 1
-#              +-- Step 2
-#              +-- Step 3
-#              +-- Step 4
-#              +-- Step 5
-#              +-- Step 6
+#      | successful?
+#      v
+#   deploy
+#
+#
+# The deploy job will NOT start until the build job succeeds.
 #
 
 jobs:
 
-  build-and-deploy:
 
-    # ----------------------------------------------------------
-    # RUNNER / COMPUTER
-    # ----------------------------------------------------------
+  # ==========================================================
+  # JOB 1 — BUILD AND TEST
+  # ==========================================================
+  #
+  # This is our CI job.
+  #
+  # It checks whether our application can:
+  #
+  #   1. Be downloaded
+  #   2. Install its dependencies
+  #   3. Pass its tests
+  #   4. Be built successfully
+  #
+
+  build:
+
+    # --------------------------------------------------------
+    # RUNNER
+    # --------------------------------------------------------
     #
-    # GitHub Actions needs a computer on which to execute
-    # our commands.
+    # GitHub gives this job a temporary Ubuntu Linux machine.
     #
-    # "ubuntu-latest" tells GitHub:
-    #
-    #   "Give this job a fresh Ubuntu Linux machine."
-    #
-    # GitHub creates this machine for the job.
-    #
-    # You don't have to manually create a server.
+    # The machine starts fresh for this workflow run.
     #
 
     runs-on: ubuntu-latest
 
 
-    # ==========================================================
+    # --------------------------------------------------------
     # STEPS
-    # ==========================================================
+    # --------------------------------------------------------
     #
-    # Steps execute from TOP -> BOTTOM.
-    #
-    # If an important step fails, the job normally stops and
-    # later steps are not executed.
+    # Steps run from top to bottom.
     #
 
     steps:
 
 
-      # ========================================================
-      # STEP 1 — CHECKOUT THE CODE
-      # ========================================================
+      # ======================================================
+      # STEP 1 — CHECKOUT SOURCE CODE
+      # ======================================================
       #
-      # GitHub's runner starts as a fresh machine.
+      # The GitHub runner starts with your repository files
+      # unavailable locally.
       #
-      # It does NOT automatically contain your repository files.
+      # checkout downloads your repository into the runner.
       #
-      # Therefore, we first download/checkout the repository
-      # into the runner.
-      #
-      # After this step, the runner has files such as:
+      # After this step the runner can access:
       #
       #   package.json
       #   package-lock.json
@@ -198,308 +214,316 @@ jobs:
       #
 
       - name: Checkout repository
-
-        # "uses" means:
-        #
-        #   "Use an existing GitHub Action."
-        #
-        # actions/checkout is an official GitHub Action for
-        # checking out repository code.
-
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
 
-      # ========================================================
-      # STEP 2 — INSTALL / CONFIGURE NODE.JS
-      # ========================================================
+      # ======================================================
+      # STEP 2 — SET UP NODE.JS
+      # ======================================================
       #
-      # React projects require Node.js to execute commands such
-      # as:
+      # React's build tools run using Node.js.
       #
-      #   npm install
-      #   npm test
-      #   npm run build
+      # We explicitly tell GitHub which Node.js version
+      # our project should use.
       #
-      # The runner may contain Node.js already, but we should
-      # explicitly specify which version our application uses.
-      #
-      # This makes the CI environment predictable.
+      # This makes the environment predictable.
       #
 
       - name: Set up Node.js
-
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
 
         with:
 
-          # ----------------------------------------------------
-          # Node.js version
-          # ----------------------------------------------------
-          #
-          # We are asking GitHub Actions to use Node.js 18.
-          #
+          # The Node.js version used by this workflow.
 
           node-version: 18
 
 
-          # ----------------------------------------------------
-          # NPM CACHE
-          # ----------------------------------------------------
+          # Enable npm dependency caching.
           #
-          # npm downloads packages from the internet.
-          #
-          # For example:
-          #
-          #   React
-          #   React DOM
-          #   Jest
-          #   Vite
-          #   etc.
-          #
-          # Downloading dependencies repeatedly can take time.
-          #
-          # "cache: npm" allows GitHub Actions to cache npm
-          # dependencies between workflow runs when possible.
-          #
-          # This can make future workflow runs faster.
-          #
+          # This can make future workflow runs faster because
+          # npm packages can be reused from GitHub's cache.
 
-          cache: 'npm'
+          cache: npm
 
 
-      # ========================================================
+      # ======================================================
       # STEP 3 — INSTALL DEPENDENCIES
-      # ========================================================
+      # ======================================================
       #
-      # "npm ci" installs the dependencies defined by the
-      # package-lock.json file.
+      # npm ci installs the dependencies defined in
+      # package-lock.json.
       #
-      # "ci" means Continuous Integration.
+      # This is commonly used in CI because it provides a
+      # clean and reproducible dependency installation.
       #
-      # It is generally preferred in CI environments because
-      # it performs a clean, reproducible installation based
-      # on the lock file.
+      # Example:
       #
-      # For example, package.json might contain:
-      #
-      #   "dependencies": {
-      #       "react": "...",
-      #       "react-dom": "..."
-      #   }
-      #
-      # npm ci installs those dependencies.
-      #
-      # After this step, the project has its node_modules
-      # available for the following steps.
+      # package.json
+      #       +
+      # package-lock.json
+      #       |
+      #       v
+      #     npm ci
+      #       |
+      #       v
+      #   node_modules/
       #
 
       - name: Install dependencies
         run: npm ci
 
 
-      # ========================================================
+      # ======================================================
       # STEP 4 — RUN TESTS
-      # ========================================================
+      # ======================================================
       #
-      # Now that dependencies are installed, we run the
-      # application's tests.
+      # This runs the test command defined in package.json.
       #
-      # "npm test" executes the test command defined inside
-      # package.json.
+      # For example:
       #
-      # We also pass:
+      #   "scripts": {
+      #       "test": "react-scripts test"
+      #   }
       #
-      #   --watchAll=false
+      # --watchAll=false is useful in CI because we don't want
+      # the test runner to keep watching files forever.
       #
-      # This tells the test runner not to sit around watching
-      # files for changes.
+      # We want:
       #
-      # That's important in CI because we want:
-      #
-      #   Start tests
-      #       |
-      #       v
+      #   Start
+      #     ↓
       #   Run tests
-      #       |
-      #       v
+      #     ↓
       #   Finish
-      #
-      # rather than:
-      #
-      #   Start tests
-      #       |
-      #       v
-      #   Keep watching forever...
       #
 
       - name: Run tests
         run: npm test -- --watchAll=false
 
 
-      # ========================================================
-      # STEP 5 — BUILD THE REACT APPLICATION
-      # ========================================================
+      # ======================================================
+      # STEP 5 — BUILD REACT APPLICATION
+      # ======================================================
       #
-      # If the tests pass, we build the production version
-      # of the React application.
+      # This creates the production version of the React app.
       #
-      # This executes the "build" script from package.json.
+      # The command comes from package.json:
       #
-      # For example:
+      #   npm run build
       #
-      #   "scripts": {
-      #       "start": "react-scripts start",
-      #       "test": "react-scripts test",
-      #       "build": "react-scripts build"
-      #   }
-      #
-      # The build process:
-      #
-      #   Source code
-      #        |
-      #        v
-      #   React build process
-      #        |
-      #        v
-      #   Optimized production files
-      #
-      # With Create React App, the output is normally:
+      # With Create React App, the result is normally:
       #
       #   build/
       #
-      # With Vite, the output is normally:
+      # Conceptually:
       #
-      #   dist/
+      #   src/
+      #     ↓
+      #   React build process
+      #     ↓
+      #   build/
       #
-      # These files are what we eventually publish to
-      # GitHub Pages.
+      # The build directory contains the static files that
+      # GitHub Pages will eventually serve.
       #
 
       - name: Build React app
         run: npm run build
 
 
-      # ========================================================
-      # STEP 6 — DEPLOY TO GITHUB PAGES
-      # ========================================================
+      # ======================================================
+      # STEP 6 — PREPARE GITHUB PAGES
+      # ======================================================
       #
-      # This step publishes our built React application.
+      # This is an official GitHub Action.
+      #
+      # It prepares the workflow/environment for GitHub Pages.
+      #
+      # This is different from the old approach where we pushed
+      # files to a "gh-pages" branch ourselves.
+      #
+      # With the modern GitHub Pages deployment system:
+      #
+      #   build/
+      #      ↓
+      #   GitHub Pages artifact
+      #      ↓
+      #   deploy-pages
+      #      ↓
+      #   GitHub Pages
+      #
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+
+      # ======================================================
+      # STEP 7 — UPLOAD BUILD AS A PAGES ARTIFACT
+      # ======================================================
+      #
+      # An artifact is a collection of files produced by a
+      # workflow that can be passed between jobs.
+      #
+      # Our build job created:
+      #
+      #   build/
+      #
+      # We now package that directory as a GitHub Pages
+      # artifact.
       #
       # IMPORTANT:
       #
-      # We do NOT want to deploy when somebody only creates
-      # a Pull Request.
+      # We are NOT deploying yet.
       #
-      # We only want deployment when:
+      # We are saying:
       #
-      #   1. The event was a PUSH
+      #   "GitHub, here are the files that should become
+      #    my website."
       #
-      # AND
+
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v4
+
+        with:
+
+          # For Create React App:
+          #
+          #   build/
+          #
+          # This is the directory created by npm run build.
+
+          path: ./build
+
+
+  # ==========================================================
+  # JOB 2 — DEPLOY
+  # ==========================================================
+  #
+  # This is our CD job.
+  #
+  # It takes the artifact created by the build job and
+  # publishes it to GitHub Pages.
+  #
+
+  deploy:
+
+    # --------------------------------------------------------
+    # DEPENDS ON BUILD
+    # --------------------------------------------------------
+    #
+    # This is extremely important.
+    #
+    # "needs: build" means:
+    #
+    #   DO NOT start this job until the "build" job finishes.
+    #
+    # If build fails:
+    #
+    #   build ❌
+    #      ↓
+    #   deploy does NOT run
+    #
+    # If build succeeds:
+    #
+    #   build ✅
+    #      ↓
+    #   deploy starts
+    #
+
+    needs: build
+
+
+    # --------------------------------------------------------
+    # ONLY DEPLOY PUSHES TO MAIN
+    # --------------------------------------------------------
+    #
+    # We don't want a Pull Request to publish the website.
+    #
+    # Therefore:
+    #
+    #   Pull Request → build/test only
+    #
+    #   Push to main → build/test + deploy
+    #
+    # github.event_name tells us what triggered the workflow.
+    #
+    # For example:
+    #
+    #   push
+    #   pull_request
+    #
+    #
+
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+
+    # --------------------------------------------------------
+    # RUNNER
+    # --------------------------------------------------------
+    #
+    # The deploy job gets its own GitHub-hosted runner.
+    #
+
+    runs-on: ubuntu-latest
+
+
+    # --------------------------------------------------------
+    # GITHUB PAGES ENVIRONMENT
+    # --------------------------------------------------------
+    #
+    # "github-pages" is the deployment environment used by
+    # GitHub Pages.
+    #
+    # The deployment action will expose the published site's
+    # URL as:
+    #
+    #   steps.deployment.outputs.page_url
+    #
+    # GitHub can then display that URL in the Actions run.
+    #
+
+    environment:
+
+      name: github-pages
+
+      url: ${{ steps.deployment.outputs.page_url }}
+
+
+    # --------------------------------------------------------
+    # DEPLOYMENT STEP
+    # --------------------------------------------------------
+
+    steps:
+
+      # ======================================================
+      # STEP 8 — DEPLOY TO GITHUB PAGES
+      # ======================================================
       #
-      #   2. The push was to MAIN
+      # This is an official GitHub Action.
       #
-      # That's what the "if" condition below checks.
+      # It takes the Pages artifact created by the build job
+      # and publishes it.
+      #
+      # Notice that we don't specify:
+      #
+      #   branch: gh-pages
+      #
+      # That's because this modern deployment approach does
+      # NOT require us to manually maintain a gh-pages branch.
+      #
+      # GitHub Pages handles the deployment for us.
       #
 
       - name: Deploy to GitHub Pages
 
-        # ------------------------------------------------------
-        # DEPLOYMENT CONDITION
-        # ------------------------------------------------------
+        # "id" gives this step a name that other parts of
+        # the workflow can reference.
         #
-        # github.ref tells us which Git reference triggered
-        # the workflow.
+        # That's why the environment URL above can use:
         #
-        # For the main branch it will be:
-        #
-        #   refs/heads/main
-        #
-        # github.event_name tells us what caused the workflow.
-        #
-        # Examples:
-        #
-        #   push
-        #   pull_request
-        #
-        # Therefore:
-        #
-        #   github.ref == 'refs/heads/main'
-        #
-        # means:
-        #
-        #   "We are working with the main branch."
-        #
-        # AND
-        #
-        #   github.event_name == 'push'
-        #
-        # means:
-        #
-        #   "The workflow was triggered by a push."
-        #
-        # Both conditions must be true.
-        #
+        #   steps.deployment.outputs.page_url
 
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        id: deployment
 
-
-        # ------------------------------------------------------
-        # DEPLOYMENT ACTION
-        # ------------------------------------------------------
-        #
-        # Instead of writing all the GitHub Pages deployment
-        # logic ourselves, we use an existing GitHub Action.
-        #
-
-        uses: Grady/github-pages-deploy-action@v4
-
-
-        with:
-
-          # ----------------------------------------------------
-          # FOLDER TO DEPLOY
-          # ----------------------------------------------------
-          #
-          # The previous build step created:
-          #
-          #   build/
-          #
-          # Therefore, we tell the deployment action:
-          #
-          #   "Take everything inside the build folder and
-          #    publish it."
-          #
-          # IMPORTANT:
-          #
-          # Create React App -> build
-          #
-          # Vite              -> dist
-          #
-
-          folder: build
-
-
-          # ----------------------------------------------------
-          # TARGET BRANCH
-          # ----------------------------------------------------
-          #
-          # The deployment action will publish the built files
-          # to the "gh-pages" branch.
-          #
-          # Conceptually:
-          #
-          #   main
-          #    |
-          #    | build
-          #    v
-          #   build/
-          #    |
-          #    | deploy
-          #    v
-          #   gh-pages
-          #
-          # GitHub Pages can then serve the contents of this
-          # branch as your website.
-          #
-
-          branch: gh-pages
+        uses: actions/deploy-pages@v4
