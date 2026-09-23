@@ -2,7 +2,7 @@
   "name": "testcicd",
   "version": "0.1.0",
   "private": true,
-  "home":"https://gradykisibu.github.io/CICDTEST",
+  "homepage": "https://gradykisibu.github.io/CICDTEST",
   "dependencies": {
     "@testing-library/dom": "^10.4.2",
     "@testing-library/jest-dom": "^6.9.1",
